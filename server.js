@@ -63,7 +63,17 @@ app.post("/api/user/login", async (req, res) => {
   }
 });
 
-// Post contact form (no auth required)
+// Register new admin user
+app.post("/api/user/register", async (req, res) => {
+  try {
+    await userService.registerUser(req.body);
+    res.status(201).json({ message: "User created successfully" });
+  } catch (msg) {
+    res.status(422).json({ message: msg });
+  }
+});
+
+// Submit contact form (no auth required)
 app.post("/api/contact", async (req, res) => {
   try {
     await userService.saveContact(req.body);

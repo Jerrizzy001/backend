@@ -94,3 +94,33 @@ module.exports.getUserById = function (id) {
       .catch(err => reject("Unable to find user"));
   });
 };
+
+
+// ----- REGISTER NEW USER -----
+module.exports.registerUser = function (userData) {
+  return new Promise((resolve, reject) => {
+    if (userData.password !== userData.password2) {
+      reject("Passwords do not match");
+      return;
+    }
+
+    User.findOne({ userName: userData.userName })
+      .then(user => {
+        if (user) return reject("Username already exists");
+        
+        bcrypt.genSalt(10, (err, salt) => {
+          bcrypt.hash(userData.password, salt, (err, hash) => {
+            if (err) reject(err);
+            
+            new User({
+              userName: userData.userName,
+              password: hash
+            }).save()
+              .then(() => resolve())
+              .catch(err => reject(err));
+          });
+        });
+      })
+      .catch(err => reject(err));
+  });
+};
