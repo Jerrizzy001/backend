@@ -46,7 +46,7 @@ app.use(passport.initialize());
 
 // ----------- ROUTES -----------
 
-// Admin login route
+// User Management Routes
 app.post("/api/user/login", async (req, res) => {
   try {
     const user = await userService.checkUser(req.body);
@@ -63,7 +63,6 @@ app.post("/api/user/login", async (req, res) => {
   }
 });
 
-// Register new admin user
 app.post("/api/user/register", async (req, res) => {
   try {
     await userService.registerUser(req.body);
@@ -73,8 +72,8 @@ app.post("/api/user/register", async (req, res) => {
   }
 });
 
-// Submit contact form (no auth required)
-app.post("/api/contact", async (req, res) => {
+// Contact Form Routes
+app.post("/api/contact/submit", async (req, res) => {
   try {
     await userService.saveContact(req.body);
     res.status(201).json({ message: "Contact submitted successfully" });
@@ -83,8 +82,7 @@ app.post("/api/contact", async (req, res) => {
   }
 });
 
-// Get all submitted contact forms (admin only)
-app.get("/api/contacts", passport.authenticate('jwt', { session: false }), async (req, res) => {
+app.get("/api/contact/all", passport.authenticate('jwt', { session: false }), async (req, res) => {
   try {
     const data = await userService.getContacts();
     res.json(data);
