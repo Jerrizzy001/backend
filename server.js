@@ -12,19 +12,15 @@ const userService = require("./user-service.js");
 const HTTP_PORT = process.env.PORT || 8080;
 
 const JWTStrategy = passportJWT.Strategy;
+const ExtractJwt = passportJWT.ExtractJwt;
 
 // JWT authentication config
 passport.use(
   new JWTStrategy(
     {
-      jwtFromRequest: (req) => {
-        const authHeader = req.headers.authorization;
-        if (authHeader && authHeader.startsWith("JWT ")) {
-          return authHeader.split(" ")[1];
-        }
-        return null;
-      },
-      secretOrKey: process.env.JWT_SECRET
+      jwtFromRequest: ExtractJwt.fromAuthHeaderAsBearerToken(),
+      secretOrKey: process.env.JWT_SECRET,
+      ignoreExpiration: false
     },
     async (jwt_payload, done) => {
       try {
@@ -49,6 +45,10 @@ app.use(passport.initialize());
 app.post("/api/user/login", async (req, res) => {
   try {
     const user = await userService.checkUser(req.body);
+    if (!user) {
+      return res.status(401).json({ message: "Invalid credentials" });
+    }
+
     const payload = {
       _id: user._id,
       userName: user.userName
@@ -56,29 +56,32 @@ app.post("/api/user/login", async (req, res) => {
 
     const token = jwt.sign(payload, process.env.JWT_SECRET, { expiresIn: '1h' });
 
-    res.json({ message: "Login successful", token });
+    res.json({ 
+      message: "Login successful",
+      token,
+      user: {
+        _id: user._id,
+        userName: user.userName
+      }
+    });
   } catch (msg) {
-    res.status(422).json({ message: msg });
+    res.status(401).json({ message: "Authentication failed" });
   }
 });
 
 app.post("/api/user/register", async (req, res) => {
   try {
-    // Get the created user from registration
     const newUser = await userService.registerUser(req.body);
-    
-    // Create JWT payload
     const payload = {
       _id: newUser._id,
       userName: newUser.userName
     };
 
-    // Generate token
     const token = jwt.sign(payload, process.env.JWT_SECRET, { expiresIn: '1h' });
 
     res.status(201).json({ 
       message: "User created successfully", 
-      token  // Include token in response
+      token
     });
   } catch (msg) {
     res.status(422).json({ message: msg });
