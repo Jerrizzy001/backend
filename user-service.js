@@ -95,7 +95,6 @@ module.exports.getUserById = function (id) {
   });
 };
 
-
 // ----- REGISTER NEW USER -----
 module.exports.registerUser = function (userData) {
   return new Promise((resolve, reject) => {
@@ -109,14 +108,19 @@ module.exports.registerUser = function (userData) {
         if (user) return reject("Username already exists");
         
         bcrypt.genSalt(10, (err, salt) => {
+          if (err) return reject(err);
+          
           bcrypt.hash(userData.password, salt, (err, hash) => {
-            if (err) reject(err);
+            if (err) return reject(err);
             
-            new User({
+            const newUser = new User({
               userName: userData.userName,
               password: hash
-            }).save()
-              .then(() => resolve())
+            });
+
+            // Save and return the new user
+            newUser.save()
+              .then(savedUser => resolve(savedUser))  // Return user object
               .catch(err => reject(err));
           });
         });

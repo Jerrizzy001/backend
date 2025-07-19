@@ -43,7 +43,6 @@ app.use(express.json());
 app.use(cors());
 app.use(passport.initialize());
 
-
 // ----------- ROUTES -----------
 
 // User Management Routes
@@ -65,8 +64,22 @@ app.post("/api/user/login", async (req, res) => {
 
 app.post("/api/user/register", async (req, res) => {
   try {
-    await userService.registerUser(req.body);
-    res.status(201).json({ message: "User created successfully" });
+    // Get the created user from registration
+    const newUser = await userService.registerUser(req.body);
+    
+    // Create JWT payload
+    const payload = {
+      _id: newUser._id,
+      userName: newUser.userName
+    };
+
+    // Generate token
+    const token = jwt.sign(payload, process.env.JWT_SECRET, { expiresIn: '1h' });
+
+    res.status(201).json({ 
+      message: "User created successfully", 
+      token  // Include token in response
+    });
   } catch (msg) {
     res.status(422).json({ message: msg });
   }
@@ -90,7 +103,6 @@ app.get("/api/contact/all", passport.authenticate('jwt', { session: false }), as
     res.status(500).json({ message: err });
   }
 });
-
 
 // ----------- SERVER INIT -----------
 userService.connect()
