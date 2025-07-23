@@ -375,6 +375,36 @@ app.post("/api/upload/video",
   }
 );
 
+// Search Routes
+app.get("/api/blogs/search", async (req, res) => {
+  try {
+    const { q, published = 'true' } = req.query;
+    if (!q) {
+      return res.status(400).json({ message: "Search query is required" });
+    }
+    
+    const publishedOnly = published === 'true';
+    const blogs = await userService.searchBlogs(q, publishedOnly);
+    res.json(blogs);
+  } catch (err) {
+    res.status(500).json({ message: err });
+  }
+});
+
+app.get("/api/projects/search", async (req, res) => {
+  try {
+    const { q } = req.query;
+    if (!q) {
+      return res.status(400).json({ message: "Search query is required" });
+    }
+    
+    const projects = await userService.searchProjects(q);
+    res.json(projects);
+  } catch (err) {
+    res.status(500).json({ message: err });
+  }
+});
+
 // ----------- SERVER INIT -----------
 userService.connect()
   .then(() => {
