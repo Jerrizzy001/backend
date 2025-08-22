@@ -54,7 +54,7 @@ let blogSchema = new Schema({
     required: true
   },
   featuredImage: {
-    type: String, // Cloudinary URL
+    type: String,
     default: null
   },
   date: {
@@ -82,90 +82,36 @@ let blogSchema = new Schema({
     maxlength: 300
   },
   readTime: {
-    type: Number, // in minutes
+    type: Number,
     default: 5
-  }
-});
-
-// ----- PROJECT SCHEMA -----
-let projectSchema = new Schema({
-  title: {
-    type: String,
-    required: true
-  },
-  description: {
-    type: String,
-    required: true
-  },
-  videoUrl: {
-    type: String, // Cloudinary video URL
-    default: null
-  },
-  projectLink: {
-    type: String,
-    validate: {
-      validator: function(v) {
-        return !v || /^https?:\/\/.+/.test(v);
-      },
-      message: 'Project link must be a valid URL'
-    }
-  },
-  githubLink: {
-    type: String,
-    validate: {
-      validator: function(v) {
-        return !v || /^https?:\/\/.+/.test(v);
-      },
-      message: 'GitHub link must be a valid URL'
-    }
-  },
-  features: [{
-    type: String
-  }],
-  technologies: [{
-    type: String
-  }],
-  date: {
-    type: Date,
-    default: Date.now
-  },
-  updatedAt: {
-    type: Date,
-    default: Date.now
-  },
-  author: {
-    type: mongoose.Schema.Types.ObjectId,
-    ref: 'users',
-    required: true
-  },
-  status: {
-    type: String,
-    enum: ['completed', 'in-progress', 'planned'],
-    default: 'completed'
   }
 });
 
 // Add indexes for better performance
 blogSchema.index({ date: -1, published: 1 });
-projectSchema.index({ date: -1 });
 contactSchema.index({ date: -1 });
 
 let User;
 let Contact;
 let Blog;
-let Project;
 
 module.exports.connect = function () {
   return new Promise(function (resolve, reject) {
-    let db = mongoose.createConnection(mongoDBConnectionString);
+    let db = mongoose.createConnection(mongoDBConnectionString, {
+      useNewUrlParser: true,
+      useUnifiedTopology: true
+    });
 
-    db.on('error', err => reject(err));
+    db.on('error', err => {
+      console.error('MongoDB connection error:', err);
+      reject(err);
+    });
 
     db.once('open', () => {
+      console.log('Connected to MongoDB successfully');
       User = db.model("users", userSchema);
       Contact = db.model("contacts", contactSchema);
       Blog = db.model("blogs", blogSchema);
-      Project = db.model("projects", projectSchema);
       resolve();
     });
   });
@@ -184,7 +130,7 @@ module.exports.checkUser = function (userData) {
           } else {
             reject("Incorrect password for user " + userData.userName);
           }
-        });
+        }).catch(err => reject("Error comparing passwords"));
       }).catch(err => {
         reject("Unable to find user " + userData.userName);
       });
@@ -194,7 +140,7 @@ module.exports.checkUser = function (userData) {
 module.exports.getUserById = function (id) {
   return new Promise((resolve, reject) => {
     User.findById(id)
-      .select('-password') // Don't return password
+      .select('-password')
       .exec()
       .then(user => {
         if (!user) return reject("User not found");
@@ -228,7 +174,6 @@ module.exports.registerUser = function (userData) {
 
             newUser.save()
               .then(savedUser => {
-                // Return user without password
                 const userResponse = {
                   _id: savedUser._id,
                   userName: savedUser.userName,
@@ -332,197 +277,5 @@ module.exports.getBlogById = function (id) {
         resolve(blog);
       })
       .catch(err => reject("Unable to find blog: " + err));
-  });
-};
-
-module.exports.updateBlog = function (id, updateData, authorId) {
-  return new Promise((resolve, reject) => {
-    // Auto-generate excerpt if not provided and content is updated
-    if (!updateData.excerpt && updateData.content) {
-      updateData.excerpt = updateData.content.substring(0, 297) + '...';
-    }
-    
-    // Recalculate read time if content is updated
-    if (updateData.content) {
-      const wordCount = updateData.content.split(' ').length;
-      updateData.readTime = Math.ceil(wordCount / 200);
-    }
-
-    updateData.updatedAt = new Date();
-
-    Blog.findOneAndUpdate(
-      { _id: id, author: authorId }, // Ensure user can only update their own blogs
-      updateData,
-      { new: true, runValidators: true }
-    )
-    .populate('author', 'userName')
-    .exec()
-    .then(updatedBlog => {
-      if (!updatedBlog) return reject("Blog not found or unauthorized");
-      resolve(updatedBlog);
-    })
-    .catch(err => reject("Error updating blog: " + err));
-  });
-};
-
-module.exports.deleteBlog = function (id, authorId) {
-  return new Promise((resolve, reject) => {
-    Blog.findOneAndDelete({ _id: id, author: authorId })
-      .exec()
-      .then(deletedBlog => {
-        if (!deletedBlog) return reject("Blog not found or unauthorized");
-        
-        // Delete associated image from Cloudinary if it exists
-        if (deletedBlog.featuredImage) {
-          const publicId = deletedBlog.featuredImage.split('/').pop().split('.')[0];
-          cloudinary.uploader.destroy(`portfolio/images/${publicId}`)
-            .catch(err => console.log("Error deleting image from Cloudinary:", err));
-        }
-        
-        resolve();
-      })
-      .catch(err => reject("Error deleting blog: " + err));
-  });
-};
-
-// ----- PROJECT MANAGEMENT -----
-module.exports.createProject = function (projectData, authorId) {
-  return new Promise((resolve, reject) => {
-    const newProject = new Project({
-      ...projectData,
-      author: authorId
-    });
-    
-    newProject.save()
-      .then(savedProject => {
-        return Project.findById(savedProject._id).populate('author', 'userName');
-      })
-      .then(populatedProject => resolve(populatedProject))
-      .catch(err => reject("Error creating project: " + err));
-  });
-};
-
-module.exports.getProjects = function (page = 1, limit = 10) {
-  return new Promise((resolve, reject) => {
-    const skip = (page - 1) * limit;
-    
-    Promise.all([
-      Project.find()
-        .populate('author', 'userName')
-        .sort({ date: -1 })
-        .skip(skip)
-        .limit(limit)
-        .exec(),
-      Project.countDocuments()
-    ])
-    .then(([projects, total]) => {
-      resolve({
-        projects,
-        pagination: {
-          currentPage: page,
-          totalPages: Math.ceil(total / limit),
-          totalProjects: total,
-          hasNextPage: page < Math.ceil(total / limit),
-          hasPreviousPage: page > 1
-        }
-      });
-    })
-    .catch(err => reject("Unable to retrieve projects: " + err));
-  });
-};
-
-module.exports.getProjectById = function (id) {
-  return new Promise((resolve, reject) => {
-    Project.findById(id)
-      .populate('author', 'userName')
-      .exec()
-      .then(project => {
-        if (!project) return reject("Project not found");
-        resolve(project);
-      })
-      .catch(err => reject("Unable to find project: " + err));
-  });
-};
-
-module.exports.updateProject = function (id, updateData, authorId) {
-  return new Promise((resolve, reject) => {
-    updateData.updatedAt = new Date();
-
-    Project.findOneAndUpdate(
-      { _id: id, author: authorId }, // Ensure user can only update their own projects
-      updateData,
-      { new: true, runValidators: true }
-    )
-    .populate('author', 'userName')
-    .exec()
-    .then(updatedProject => {
-      if (!updatedProject) return reject("Project not found or unauthorized");
-      resolve(updatedProject);
-    })
-    .catch(err => reject("Error updating project: " + err));
-  });
-};
-
-module.exports.deleteProject = function (id, authorId) {
-  return new Promise((resolve, reject) => {
-    Project.findOneAndDelete({ _id: id, author: authorId })
-      .exec()
-      .then(deletedProject => {
-        if (!deletedProject) return reject("Project not found or unauthorized");
-        
-        // Delete associated video from Cloudinary if it exists
-        if (deletedProject.videoUrl) {
-          const publicId = deletedProject.videoUrl.split('/').pop().split('.')[0];
-          cloudinary.uploader.destroy(`portfolio/videos/${publicId}`, { resource_type: 'video' })
-            .catch(err => console.log("Error deleting video from Cloudinary:", err));
-        }
-        
-        resolve();
-      })
-      .catch(err => reject("Error deleting project: " + err));
-  });
-};
-
-// ----- UTILITY FUNCTIONS -----
-module.exports.searchBlogs = function (searchTerm, publishedOnly = true) {
-  return new Promise((resolve, reject) => {
-    const query = {
-      $and: [
-        publishedOnly ? { published: true } : {},
-        {
-          $or: [
-            { title: { $regex: searchTerm, $options: 'i' } },
-            { content: { $regex: searchTerm, $options: 'i' } },
-            { tags: { $in: [new RegExp(searchTerm, 'i')] } }
-          ]
-        }
-      ]
-    };
-
-    Blog.find(query)
-      .populate('author', 'userName')
-      .sort({ date: -1 })
-      .exec()
-      .then(blogs => resolve(blogs))
-      .catch(err => reject("Error searching blogs: " + err));
-  });
-};
-
-module.exports.searchProjects = function (searchTerm) {
-  return new Promise((resolve, reject) => {
-    const query = {
-      $or: [
-        { title: { $regex: searchTerm, $options: 'i' } },
-        { description: { $regex: searchTerm, $options: 'i' } },
-        { technologies: { $in: [new RegExp(searchTerm, 'i')] } }
-      ]
-    };
-
-    Project.find(query)
-      .populate('author', 'userName')
-      .sort({ date: -1 })
-      .exec()
-      .then(projects => resolve(projects))
-      .catch(err => reject("Error searching projects: " + err));
   });
 };
