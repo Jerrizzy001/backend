@@ -199,15 +199,41 @@ app.post("/api/blogs",
   handleValidationErrors,
   async (req, res) => {
     try {
-      const blogData = {
-        ...req.body,
-        featuredImage: req.file ? req.file.path : null
-      };
+      console.log('Request body:', req.body);
+      console.log('Request file:', req.file);
+      
+      const blogData = { ...req.body };
+      
+      // Handle file upload - check if Cloudinary is configured
+      if (req.file) {
+        if (req.file.path) {
+          // Cloudinary upload successful
+          blogData.featuredImage = req.file.path;
+        } else if (req.file.buffer) {
+          // Fallback - file in memory (Cloudinary not configured)
+          console.warn('File uploaded to memory storage - Cloudinary not configured');
+          blogData.featuredImage = null;
+        }
+      }
       
       // Parse published field as boolean
       if (blogData.published !== undefined) {
-        blogData.published = blogData.published === 'true';
+        blogData.published = blogData.published === 'true' || blogData.published === true;
       }
+      
+      // Handle tags array if it exists
+      if (blogData.tags) {
+        if (typeof blogData.tags === 'string') {
+          try {
+            blogData.tags = JSON.parse(blogData.tags);
+          } catch (e) {
+            // If it's a comma-separated string
+            blogData.tags = blogData.tags.split(',').map(tag => tag.trim()).filter(tag => tag);
+          }
+        }
+      }
+      
+      console.log('Processed blog data:', blogData);
       
       const newBlog = await userService.createBlog(blogData, req.user._id);
       res.status(201).json({ 
@@ -216,7 +242,10 @@ app.post("/api/blogs",
       });
     } catch (err) {
       console.error("Create blog error:", err);
-      res.status(500).json({ message: err.message || err });
+      res.status(500).json({ 
+        message: err.message || err,
+        error: process.env.NODE_ENV === 'development' ? err : undefined
+      });
     }
   }
 );

@@ -210,30 +210,73 @@ module.exports.getContacts = function () {
 };
 
 // ----- BLOG MANAGEMENT -----
+
+
 module.exports.createBlog = function (blogData, authorId) {
   return new Promise((resolve, reject) => {
-    // Auto-generate excerpt if not provided
-    if (!blogData.excerpt && blogData.content) {
-      blogData.excerpt = blogData.content.substring(0, 297) + '...';
+    try {
+      console.log('Creating blog with data:', blogData);
+      console.log('Author ID:', authorId);
+      
+      // Validate required fields
+      if (!blogData.title || !blogData.content) {
+        return reject(new Error('Title and content are required'));
+      }
+      
+      if (!authorId) {
+        return reject(new Error('Author ID is required'));
+      }
+      
+      // Auto-generate excerpt if not provided
+      if (!blogData.excerpt && blogData.content) {
+        const cleanContent = blogData.content.replace(/<[^>]*>/g, ''); // Remove HTML tags
+        blogData.excerpt = cleanContent.substring(0, 297) + '...';
+      }
+      
+      // Calculate read time (average 200 words per minute)
+      if (blogData.content) {
+        const cleanContent = blogData.content.replace(/<[^>]*>/g, ''); // Remove HTML tags
+        const wordCount = cleanContent.split(/\s+/).filter(word => word.length > 0).length;
+        blogData.readTime = Math.max(1, Math.ceil(wordCount / 200));
+      }
+      
+      // Ensure tags is an array
+      if (blogData.tags && !Array.isArray(blogData.tags)) {
+        if (typeof blogData.tags === 'string') {
+          try {
+            blogData.tags = JSON.parse(blogData.tags);
+          } catch (e) {
+            blogData.tags = blogData.tags.split(',').map(tag => tag.trim()).filter(tag => tag);
+          }
+        }
+      }
+      
+      const newBlog = new Blog({
+        ...blogData,
+        author: authorId,
+        updatedAt: new Date()
+      });
+      
+      console.log('Blog object before save:', newBlog);
+      
+      newBlog.save()
+        .then(savedBlog => {
+          console.log('Blog saved successfully:', savedBlog._id);
+          return Blog.findById(savedBlog._id).populate('author', 'userName');
+        })
+        .then(populatedBlog => {
+          console.log('Blog populated successfully');
+          resolve(populatedBlog);
+        })
+        .catch(err => {
+          console.error('Error saving blog:', err);
+          reject(new Error("Error creating blog: " + (err.message || err)));
+        });
+        
+    } catch (error) {
+      console.error('Error in createBlog:', error);
+      reject(new Error("Error processing blog data: " + error.message));
     }
-    
-    // Calculate read time (average 200 words per minute)
-    if (blogData.content) {
-      const wordCount = blogData.content.split(' ').length;
-      blogData.readTime = Math.ceil(wordCount / 200);
-    }
-
-    const newBlog = new Blog({
-      ...blogData,
-      author: authorId
-    });
-    
-    newBlog.save()
-      .then(savedBlog => {
-        return Blog.findById(savedBlog._id).populate('author', 'userName');
-      })
-      .then(populatedBlog => resolve(populatedBlog))
-      .catch(err => reject("Error creating blog: " + err));
   });
 };
 
