@@ -122,8 +122,7 @@ app.post("/api/user/login", async (req, res) => {
 
     const payload = {
       _id: user._id,
-      userName: user.userName,
-      isAdmin: user.isAdmin
+      userName: user.userName
     };
 
     const token = jwt.sign(payload, process.env.JWT_SECRET, { expiresIn: '24h' });
@@ -193,49 +192,14 @@ app.get("/api/health", (req, res) => {
 });
 
 // Blog Routes
-app.post("/api/blogs",
+app.post("/api/blogs", 
   passport.authenticate('jwt', { session: false }),
   uploadImage.single('featuredImage'),
   blogValidation,
   handleValidationErrors,
   async (req, res) => {
     try {
-      if (!req.user.isAdmin) {
-        return res.status(403).json({ message: "Only admins can create blogs" });
-      }
-
-      const blogData = { ...req.body };
-
-      if (req.file?.path) {
-        blogData.featuredImage = req.file.path;
-      }
-
-      if (blogData.published !== undefined) {
-        blogData.published = blogData.published === 'true' || blogData.published === true;
-      }
-
-      if (blogData.tags) {
-        if (typeof blogData.tags === 'string') {
-          try {
-            blogData.tags = JSON.parse(blogData.tags);
-          } catch (e) {
-            blogData.tags = blogData.tags.split(',').map(tag => tag.trim()).filter(tag => tag);
-          }
-        }
-      }
-
-      const newBlog = await userService.createBlog(blogData, req.user._id);
-      res.status(201).json({ message: "Blog created successfully", blog: newBlog });
-
-    } catch (err) {
-      console.error("Create blog error:", err);
-      res.status(500).json({
-        message: err.message || err,
-        error: process.env.NODE_ENV === 'development' ? err : undefined
-      });
-    }
-  }
-);
+      console.log('Request body:', req.body);
       console.log('Request file:', req.file);
       
       const blogData = { ...req.body };
@@ -322,3 +286,5 @@ userService.connect()
     console.log("Unable to start the server: " + err);
     process.exit();
   });
+
+  module.exports = app;

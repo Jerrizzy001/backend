@@ -20,10 +20,6 @@ let userSchema = new Schema({
   createdAt: {
     type: Date,
     default: Date.now
-  },
-  isAdmin: {
-    type: Boolean,
-    default: false
   }
 });
 
@@ -173,7 +169,6 @@ module.exports.registerUser = function (userData) {
             
             const newUser = new User({
               userName: userData.userName,
-              isAdmin: userData.isAdmin || false,
               password: hash
             });
 
